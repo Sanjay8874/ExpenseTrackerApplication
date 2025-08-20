@@ -7,7 +7,11 @@ import com.expense.ExpenseTrackerApplication.Entity.User;
 import com.expense.ExpenseTrackerApplication.Repository.ExpenseRepository;
 import com.expense.ExpenseTrackerApplication.Repository.UserRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @Transactional
@@ -44,8 +48,30 @@ public class ExpenseServiceImpl {
                 savedExpense.getCategory(),
                 savedExpense.getReceiptUrl()
         );
+    }
 
+    public List<ExpenseResponseDTO> getAllExpenseDetails() {
+        List<Expense> expenseList = expenseRepository.findAll();
+        return expenseList.stream().map(this::mapToDto).toList();
+    }
 
-
+    public ExpenseResponseDTO mapToDto(Expense expense){
+        return new ExpenseResponseDTO(expense.getId(),
+                expense.getTitle(),
+                expense.getAmount(),
+                expense.getDate(),
+                expense.getCategory(),
+                expense.getReceiptUrl());
+    }
+// use Bean Util to copy properties from Expense to ExpenseResponse
+    public List<ExpenseResponseDTO> getAllExpenseDetails1() {
+        List<Expense> expenseList = expenseRepository.findAll();
+        List<ExpenseResponseDTO> expenseList1 = new ArrayList<>();
+        for (Expense expense:expenseList){
+            ExpenseResponseDTO expenseResponseDTO = new ExpenseResponseDTO();
+            BeanUtils.copyProperties(expense,expenseResponseDTO);
+            expenseList1.add(expenseResponseDTO);
+        }
+        return expenseList1;
     }
 }
