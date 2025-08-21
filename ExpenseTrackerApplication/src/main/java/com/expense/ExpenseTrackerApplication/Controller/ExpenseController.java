@@ -4,6 +4,11 @@ import com.expense.ExpenseTrackerApplication.DTO.ExpenseRequestDTO;
 import com.expense.ExpenseTrackerApplication.DTO.ExpenseResponseDTO;
 import com.expense.ExpenseTrackerApplication.Repository.UserRepository;
 import com.expense.ExpenseTrackerApplication.ServiceImpl.ExpenseServiceImpl;
+import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.repository.query.Param;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/expenses")
 public class ExpenseController {
+    private static final Logger logger = LoggerFactory.getLogger(ExpenseController.class);
     private final UserRepository userRepository;
     private final ExpenseServiceImpl expenseService;
 
@@ -22,13 +28,20 @@ public class ExpenseController {
     }
 
     @PostMapping
-    public ExpenseResponseDTO addExpense(@AuthenticationPrincipal UserDetails userDetails, @RequestBody ExpenseRequestDTO dto) {
+    public ResponseEntity<ExpenseResponseDTO> addExpense(@AuthenticationPrincipal UserDetails userDetails, @Valid @RequestBody ExpenseRequestDTO dto) {
         Long userId = userRepository.findByEmail(userDetails.getUsername()).get().getId();
-        return expenseService.addExpense(userId, dto);
+        logger.info("Ready to Response");
+        return ResponseEntity.status(201).body(expenseService.addExpense(userId, dto));
     }
 
     @GetMapping("/getAllExpense")
     public List<ExpenseResponseDTO> getAllExpense() {
         return expenseService.getAllExpenseDetails();
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<List<ExpenseResponseDTO>> getById(@PathVariable Long id){
+        logger.info("Start finding the Expense for userId {}",id);
+        return ResponseEntity.status(201).body(expenseService.getById(id));
     }
 }
