@@ -1,10 +1,6 @@
-package com.expense.ExpenseTrackerApplication.Controller;
+package com.expense.ExpenseTrackerApplication.Exception;
 
 // package: com.expense.shared.error
-import com.expense.ExpenseTrackerApplication.Exception.ApiError;
-import com.expense.ExpenseTrackerApplication.Exception.BadRequestException;
-import com.expense.ExpenseTrackerApplication.Exception.DuplicateResourceException;
-import com.expense.ExpenseTrackerApplication.Exception.ResourceNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;

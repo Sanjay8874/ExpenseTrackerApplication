@@ -3,11 +3,10 @@ package com.expense.ExpenseTrackerApplication.Controller;
 import com.expense.ExpenseTrackerApplication.DTO.ExpenseRequestDTO;
 import com.expense.ExpenseTrackerApplication.DTO.ExpenseResponseDTO;
 import com.expense.ExpenseTrackerApplication.Repository.UserRepository;
-import com.expense.ExpenseTrackerApplication.ServiceImpl.ExpenseServiceImpl;
+import com.expense.ExpenseTrackerApplication.ServiceImpl.ExpenseServiceImpl1;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.repository.query.Param;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -20,9 +19,9 @@ import java.util.List;
 public class ExpenseController {
     private static final Logger logger = LoggerFactory.getLogger(ExpenseController.class);
     private final UserRepository userRepository;
-    private final ExpenseServiceImpl expenseService;
+    private final ExpenseServiceImpl1 expenseService;
 
-    public ExpenseController(UserRepository userRepository, ExpenseServiceImpl expenseService) {
+    public ExpenseController(UserRepository userRepository, ExpenseServiceImpl1 expenseService) {
         this.userRepository = userRepository;
         this.expenseService = expenseService;
     }

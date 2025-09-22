@@ -4,22 +4,20 @@ import com.expense.ExpenseTrackerApplication.DTO.ExpenseRequestDTO;
 import com.expense.ExpenseTrackerApplication.DTO.ExpenseResponseDTO;
 import com.expense.ExpenseTrackerApplication.Entity.Expense;
 import com.expense.ExpenseTrackerApplication.Entity.User;
+import com.expense.ExpenseTrackerApplication.Exception.BadRequestException;
 import com.expense.ExpenseTrackerApplication.Exception.ResourceNotFoundException;
 import com.expense.ExpenseTrackerApplication.Repository.ExpenseRepository;
 import com.expense.ExpenseTrackerApplication.Repository.UserRepository;
-import jakarta.transaction.Transactional;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.BeanUtils;
-import org.springframework.stereotype.Service;
+import com.expense.ExpenseTrackerApplication.Service.ExpenseService;
 
-import java.util.ArrayList;
+import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
-@Service
-@Transactional
-public class ExpenseServiceImpl {
-    private static final Logger logger = LoggerFactory.getLogger(ExpenseServiceImpl.class);
+public class ExpenseServiceImpl implements ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final UserRepository userRepository;
 
@@ -28,96 +26,148 @@ public class ExpenseServiceImpl {
         this.userRepository = userRepository;
     }
 
-    public ExpenseResponseDTO addExpense(Long userId, ExpenseRequestDTO dto) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+    @Override
+    public ExpenseResponseDTO create(Long userId, ExpenseRequestDTO dto) {
+        User user = getUser(userId);
+        validate(dto);
 
-        Expense expense = new Expense();
-        expense.setTitle(dto.getTitle());
-        expense.setAmount(dto.getAmount());
-        expense.setDate(dto.getDate());
-        expense.setCategory(dto.getCategory());
-        //expense.setReceiptUrl(dto.get);
-        expense.setUser(user);
-        Expense savedExpense = expenseRepository.save(expense);
+        Expense e = new Expense();
+        copy(dto, e);
+        e.setUser(user);
 
-       /* ExpenseResponseDTO expenseResponseDTO = new ExpenseResponseDTO();
-        expenseResponseDTO.setAmount(savedExpense.getAmount());*/
-        // Map Entity → ResponseDTO
-        return new ExpenseResponseDTO(
-                savedExpense.getId(),
-                savedExpense.getTitle(),
-                savedExpense.getAmount(),
-                savedExpense.getDate(),
-                savedExpense.getCategory(),
-                savedExpense.getReceiptUrl()
-        );
+        return toDto(expenseRepository.save(e));
     }
 
-    public List<ExpenseResponseDTO> getAllExpenseDetails() {
-        List<Expense> expenseList = expenseRepository.findAll();
-        return expenseList.stream().map(this::mapToDto).toList();
+    @Override
+    public ExpenseResponseDTO update(Long userId, Long expenseId, ExpenseRequestDTO dto) {
+        User user = getUser(userId);
+        Expense e = expenseRepository.findByIdAndUser(expenseId, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Expense not found"));
+
+        // allow partial update; validation where logical
+        if (dto.getAmount() != null && dto.getAmount() <= 0) {
+            throw new BadRequestException("Amount must be greater than zero");
+        }
+        if (dto.getDate() != null && dto.getDate().isAfter(LocalDate.now())) {
+            throw new BadRequestException("Date cannot be in the future");
+        }
+
+        copy(dto, e);
+        return toDto(expenseRepository.save(e));
     }
 
-    public ExpenseResponseDTO mapToDto(Expense expense) {
-        return new ExpenseResponseDTO(expense.getId(),
-                expense.getTitle(),
-                expense.getAmount(),
-                expense.getDate(),
-                expense.getCategory(),
-                expense.getReceiptUrl());
+    @Override
+    public void delete(Long userId, Long expenseId) {
+        User user = getUser(userId);
+        Expense e = expenseRepository.findByIdAndUser(expenseId, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Expense not found"));
+        expenseRepository.delete(e);
     }
 
-    // use Bean Util to copy properties from Expense to ExpenseResponse
-    public List<ExpenseResponseDTO> getAllExpenseDetails1() {
-        List<Expense> expenseList = expenseRepository.findAll();
-        List<ExpenseResponseDTO> expenseList1 = new ArrayList<>();
-        for (Expense expense : expenseList) {
-            ExpenseResponseDTO expenseResponseDTO = new ExpenseResponseDTO();
-            BeanUtils.copyProperties(expense, expenseResponseDTO);
-            expenseList1.add(expenseResponseDTO);
-        }
-        return expenseList1;
+    @Override
+    public ExpenseResponseDTO getOne(Long userId, Long expenseId) {
+        User user = getUser(userId);
+        Expense e = expenseRepository.findByIdAndUser(expenseId, user)
+                .orElseThrow(() -> new ResourceNotFoundException("Expense not found"));
+        return toDto(e);
     }
 
+    @Override
+    public List<ExpenseResponseDTO> listAll(Long userId) {
+        User user = getUser(userId);
+        return expenseRepository.findAllByUser(user).stream().map(this::toDto).toList();
+    }
 
-    public List<ExpenseResponseDTO> getById(Long id) {
-        List<Expense> expenseList = expenseRepository.findByUserId(id);
-        logger.info("Size {}", expenseList.size());
-        for (Expense ex1 : expenseList) {
-            logger.info("expense {}", ex1.toString());
+    @Override
+    public List<ExpenseResponseDTO> listByDateRange(Long userId, LocalDate from, LocalDate to) {
+        User user = getUser(userId);
+        LocalDate f = from != null ? from : LocalDate.MIN;
+        LocalDate t = to != null ? to : LocalDate.MAX;
+        return expenseRepository.findAllByUserAndDateBetween(user, f, t).stream().map(this::toDto).toList();
+    }
+
+    @Override
+    public List<ExpenseResponseDTO> listByCategory(Long userId, String category) {
+        if (category == null || category.isBlank()) return listAll(userId);
+        User user = getUser(userId);
+        return expenseRepository.findAllByUserAndCategoryIgnoreCase(user, category.trim())
+                .stream().map(this::toDto).toList();
+    }
+
+    @Override
+    public List<ExpenseResponseDTO> listByCategoryAndDateRange(Long userId, String category, LocalDate from, LocalDate to) {
+        User user = getUser(userId);
+        LocalDate f = from != null ? from : LocalDate.MIN;
+        LocalDate t = to != null ? to : LocalDate.MAX;
+        if (category == null || category.isBlank()) {
+            return expenseRepository.findAllByUserAndDateBetween(user, f, t).stream().map(this::toDto).toList();
         }
+        return expenseRepository.findAllByUserAndCategoryIgnoreCaseAndDateBetween(user, category.trim(), f, t)
+                .stream().map(this::toDto).toList();
+    }
 
-        List<ExpenseResponseDTO> listOfExpense = new ArrayList<>();
-        if (!expenseList.isEmpty()) {
-            logger.info("in if condition");
+    @Override
+    public Double monthlyTotal(Long userId, YearMonth month) {
+        User user = getUser(userId);
+        var from = month.atDay(1);
+        var to = month.atEndOfMonth();
+        return expenseRepository.sumAmountByUserAndDateBetween(user, from, to);
+    }
 
-            for (Expense expense : expenseList) {
-                ExpenseResponseDTO expenseResponseDTO = new ExpenseResponseDTO();
-                BeanUtils.copyProperties(expense, expenseResponseDTO);
-                listOfExpense.add(expenseResponseDTO);
-            }
+    @Override
+    public Map<String, Double> monthlyCategoryTotals(Long userId, YearMonth month) {
+        User user = getUser(userId);
+        var from = month.atDay(1);
+        var to = month.atEndOfMonth();
+        var rows = expenseRepository.sumByCategory(user, from, to);
+        return rows.stream().collect(Collectors.toMap(
+                r -> Objects.toString(r[0], "UNKNOWN"),
+                r -> ((Number) r[1]).doubleValue()
+        ));
+    }
 
-            for (ExpenseResponseDTO ex1 : listOfExpense) {
-                logger.info("expense11 {}", ex1.toString());
-            }
-        } else {
-            throw new ResourceNotFoundException("Expense not available for UserId" + id);
+    // ===== helpers =====
+    private User getUser(Long userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
+    private void validate(ExpenseRequestDTO dto) {
+        if (dto.getAmount() == null || dto.getAmount() <= 0) {
+            throw new BadRequestException("Amount must be greater than zero");
         }
+        if (dto.getTitle() == null || dto.getTitle().isBlank()) {
+            throw new BadRequestException("Title is required");
+        }
+        if (dto.getCategory() == null || dto.getCategory().isBlank()) {
+            throw new BadRequestException("Category is required");
+        }
+        if (dto.getDate() == null) {
+            throw new BadRequestException("Date is required");
+        }
+        if (dto.getDate().isAfter(LocalDate.now())) {
+            throw new BadRequestException("Date cannot be in the future");
+        }
+    }
 
-        /*Optional<List<Expense>> exO = Optional.ofNullable(expenseList);
-        ExpenseResponseDTO expenseResponseDTO = new ExpenseResponseDTO();
-        List<ExpenseResponseDTO> listOfExpense = new ArrayList<>();
-        if (exO.isPresent()){
-            for(Expense expense:expenseList){
-                BeanUtils.copyProperties(expense, expenseResponseDTO);
-                listOfExpense.add(expenseResponseDTO);
-            }
-        }
-        else {
-            throw new ResourceNotFoundException("Expense not available for UserId" +id);
-        }
-        return listOfExpense;*/
-        return listOfExpense;
+    private void copy(ExpenseRequestDTO s, Expense t) {
+        if (s.getTitle() != null) t.setTitle(s.getTitle().trim());
+        if (s.getAmount() != null) t.setAmount(s.getAmount());
+        if (s.getDate() != null) t.setDate(s.getDate());
+        if (s.getCategory() != null) t.setCategory(s.getCategory().trim());
+        // optional
+        if (s.getReceiptUrl() != null) t.setReceiptUrl(s.getReceiptUrl());
+    }
+
+    private ExpenseResponseDTO toDto(Expense e) {
+        ExpenseResponseDTO dto = new ExpenseResponseDTO();
+        dto.setId(e.getId());
+        dto.setTitle(e.getTitle());
+        dto.setAmount(e.getAmount());
+        dto.setDate(e.getDate());
+        dto.setCategory(e.getCategory());
+        //dto.setReceiptUrl(e.getReceiptUrl());
+        //dto.setUserId(e.getUser() != null ? e.getUser().getId() : null);
+        return dto;
     }
 }
