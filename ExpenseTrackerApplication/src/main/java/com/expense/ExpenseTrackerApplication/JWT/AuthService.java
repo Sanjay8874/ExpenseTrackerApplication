@@ -41,12 +41,17 @@ public class AuthService {
     }
 
     public String login(LoginRequest request) {
+        logger.info("Inside login");
+        logger.info(" logging the user {}:", request.getEmail());
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        logger.info(" User Found in DB for {}:", request.getEmail());
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            logger.info("Password Miss Match");
             throw new BadCredentialsException("Invalid credentials");
         }
+        logger.info("Password Missed for {}", request.getEmail());
         return jwtService.generateToken(user);
     }
 }
